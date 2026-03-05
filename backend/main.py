@@ -456,7 +456,7 @@ async def pv_send_rewards(body: SendRewardsBody):
         raise HTTPException(status_code=400, detail="No mapped students to send rewards to")
 
     client = PrizeversityClient(settings["classroom_id"], settings["api_key"])
-    updates = [{"studentId": p["pv_student_id"], "amount": p["points"]} for p in preview]
+    updates = [{"userId": p["pv_student_id"], "amount": p["points"]} for p in preview]
     description = f"RewardKeeper Week {body.week} rewards"
 
     try:

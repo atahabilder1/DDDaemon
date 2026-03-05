@@ -117,7 +117,7 @@ class PrizeversityClient:
     async def adjust_wallet(self, updates, description):
         """Send bits to students. NOT called in dry-run mode.
         POST /wallet/adjust
-        updates: list of {studentId, amount}
+        updates: list of {userId, amount}
         """
         payload = {
             "classroomId": self.classroom_id,
