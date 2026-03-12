@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import hashlib
+import secrets
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "rewards.db")
 
@@ -8,8 +10,34 @@ def _get_conn():
     return sqlite3.connect(DB_PATH)
 
 
+def _hash_password(password, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((salt + password).encode()).hexdigest()
+    return salt, hashed
+
+
 def init_db():
     conn = _get_conn()
+
+    # Users table
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crn TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            password_salt TEXT NOT NULL,
+            ta_name TEXT NOT NULL,
+            subject TEXT NOT NULL DEFAULT '',
+            course TEXT NOT NULL DEFAULT '',
+            title TEXT NOT NULL DEFAULT '',
+            class_start_time TEXT NOT NULL DEFAULT '02:30:00 PM',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+
     # Check if the old table exists without ta_name column — if so, drop and recreate
     cursor = conn.execute("PRAGMA table_info(week_results)")
     columns = [row[1] for row in cursor.fetchall()]
@@ -387,3 +415,43 @@ def get_reward_send_log(ta_name, week):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# --- User Registration CRUD ---
+
+def register_user(crn, password, ta_name, subject="", course="", title="", class_start_time="02:30:00 PM"):
+    """Register a new user. Returns True on success, raises on duplicate CRN."""
+    salt, hashed = _hash_password(password)
+    conn = _get_conn()
+    try:
+        conn.execute(
+            """INSERT INTO users (crn, password_hash, password_salt, ta_name, subject, course, title, class_start_time)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (crn, hashed, salt, ta_name, subject, course, title, class_start_time),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        raise ValueError("CRN already registered")
+    finally:
+        conn.close()
+
+
+def get_user_by_crn(crn):
+    """Return user dict or None."""
+    conn = _get_conn()
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM users WHERE crn = ?", (crn,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def verify_user_password(crn, password):
+    """Check password against stored hash. Returns user dict or None."""
+    user = get_user_by_crn(crn)
+    if not user:
+        return None
+    _, hashed = _hash_password(password, user["password_salt"])
+    if hashed == user["password_hash"]:
+        return user
+    return None

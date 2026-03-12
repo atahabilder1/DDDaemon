@@ -2,7 +2,7 @@ import { useState } from "react";
 
 const LOGIN_URL = "http://localhost:8000/api/login";
 
-export default function Login({ onLogin, onCancel }) {
+export default function Login({ onLogin, onCancel, onSwitchToRegister }) {
   const [crn, setCrn] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -71,6 +71,14 @@ export default function Login({ onLogin, onCancel }) {
               Cancel
             </button>
           </div>
+          {onSwitchToRegister && (
+            <p className="auth-switch">
+              Don't have an account?{" "}
+              <button type="button" className="auth-switch-btn" onClick={onSwitchToRegister}>
+                Register
+              </button>
+            </p>
+          )}
         </form>
       </div>
     </div>

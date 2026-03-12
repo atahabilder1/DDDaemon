@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Login from "./components/Login.jsx";
+import Register from "./components/Register.jsx";
 import Rubric from "./components/Rubric.jsx";
 import UploadForm from "./components/UploadForm.jsx";
 import ResultsTable from "./components/ResultsTable.jsx";
@@ -16,6 +17,7 @@ export default function App() {
   const [courseInfo, setCourseInfo] = useState(() => localStorage.getItem("courseInfo") || "");
   const [displayName, setDisplayName] = useState(() => localStorage.getItem("displayName") || "");
   const [showLogin, setShowLogin] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
   const [showPvSettings, setShowPvSettings] = useState(false);
   const [file1, setFile1] = useState(null);
   const [file2, setFile2] = useState(null);
@@ -257,7 +259,7 @@ export default function App() {
         <div className="header-content">
           <div className="header-top">
             <p className="header-subtitle">Debug Dungeon Reward Calculator</p>
-            <h1 className="logo"><span className="logo-icon">🏆</span> RewardKeeper <span className="logo-icon">🎮</span></h1>
+            <h1 className="logo"><span className="logo-icon">🏆</span> DDDaemon <span className="logo-icon">🎮</span></h1>
             <div className="header-user">
               {taName ? (
                 <>
@@ -270,7 +272,10 @@ export default function App() {
                   {courseInfo && <span className="course-info">{courseInfo}</span>}
                 </>
               ) : (
-                <button className="logout-btn" onClick={() => setShowLogin(true)}>Login</button>
+                <div className="header-user-top">
+                  <button className="logout-btn" onClick={() => setShowLogin(true)}>Login</button>
+                  <button className="logout-btn register-btn" onClick={() => setShowRegister(true)}>Register</button>
+                </div>
               )}
             </div>
           </div>
@@ -279,7 +284,19 @@ export default function App() {
 
       <div className="container">
         {showLogin && !taName && (
-          <Login onLogin={handleLogin} onCancel={() => setShowLogin(false)} />
+          <Login
+            onLogin={handleLogin}
+            onCancel={() => setShowLogin(false)}
+            onSwitchToRegister={() => { setShowLogin(false); setShowRegister(true); }}
+          />
+        )}
+
+        {showRegister && !taName && (
+          <Register
+            onRegister={handleLogin}
+            onCancel={() => setShowRegister(false)}
+            onSwitchToLogin={() => { setShowRegister(false); setShowLogin(true); }}
+          />
         )}
 
         {showPvSettings && taName && (
@@ -380,7 +397,7 @@ export default function App() {
 
       <footer className="app-footer">
         <p>Developed by Anik Tahabilder | Lab Instructor CSC1100</p>
-        <p>&copy; {new Date().getFullYear()} RewardKeeper. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} DDDaemon. All rights reserved.</p>
       </footer>
     </>
   );

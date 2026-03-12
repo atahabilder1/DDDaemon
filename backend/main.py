@@ -15,13 +15,14 @@ from db import (
     save_pv_settings, get_pv_settings, delete_pv_settings,
     save_student_mappings, get_student_mappings, delete_student_mappings,
     save_reward_send_log, get_reward_send_log,
+    register_user, verify_user_password, get_user_by_crn,
 )
 
 app = FastAPI(title="RewardKeeper API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,24 +35,69 @@ ALLOWED_CRNS = {entry["crn"]: entry for entry in CONFIG["allowed_crns"]}
 
 init_db()
 
-@app.post("/api/login")
-async def login(crn: str = Form(...), password: str = Form(...)):
+@app.post("/api/register")
+async def register(
+    crn: str = Form(...),
+    password: str = Form(...),
+    ta_name: str = Form(...),
+    subject: str = Form(""),
+    course: str = Form(""),
+    title: str = Form(""),
+    class_start_time: str = Form("02:30:00 PM"),
+):
+    crn = crn.strip()
+    if not crn:
+        raise HTTPException(status_code=400, detail="CRN is required")
+    if not ta_name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    if len(password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     try:
-        crn_num = int(crn)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="CRN must be a number")
-    if crn_num not in ALLOWED_CRNS:
-        raise HTTPException(status_code=401, detail="CRN not authorized")
-    if int(password) != crn_num * 2:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    entry = ALLOWED_CRNS[crn_num]
+        register_user(crn, password, ta_name.strip(), subject.strip(), course.strip(), title.strip(), class_start_time.strip())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {
         "status": "ok",
         "ta_name": crn,
-        "display_name": entry.get("ta_name", ""),
-        "course_info": f"{entry['subject']} {entry['course']} — {entry['title']}",
-        "class_start_time": entry.get("class_start_time", "02:30:00 PM"),
+        "display_name": ta_name.strip(),
+        "course_info": f"{subject.strip()} {course.strip()} — {title.strip()}".strip(" —"),
+        "class_start_time": class_start_time.strip() or "02:30:00 PM",
     }
+
+
+@app.post("/api/login")
+async def login(crn: str = Form(...), password: str = Form(...)):
+    crn = crn.strip()
+    # First check registered users in DB
+    user = verify_user_password(crn, password)
+    if user:
+        course_info = f"{user['subject']} {user['course']} — {user['title']}".strip(" —")
+        return {
+            "status": "ok",
+            "ta_name": crn,
+            "display_name": user["ta_name"],
+            "course_info": course_info,
+            "class_start_time": user.get("class_start_time", "02:30:00 PM"),
+        }
+    # Fallback to config-based auth
+    try:
+        crn_num = int(crn)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid CRN or password")
+    if crn_num in ALLOWED_CRNS:
+        try:
+            if int(password) == crn_num * 2:
+                entry = ALLOWED_CRNS[crn_num]
+                return {
+                    "status": "ok",
+                    "ta_name": crn,
+                    "display_name": entry.get("ta_name", ""),
+                    "course_info": f"{entry['subject']} {entry['course']} — {entry['title']}",
+                    "class_start_time": entry.get("class_start_time", "02:30:00 PM"),
+                }
+        except ValueError:
+            pass
+    raise HTTPException(status_code=401, detail="Invalid CRN or password")
 
 
 @app.get("/api/streak/{ta_name}")
@@ -108,9 +154,13 @@ async def compute(
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Files must be valid UTF-8 CSV files")
 
-    # Get class start time from config for this CRN
-    crn_num = int(ta_name) if ta_name.isdigit() else 0
-    class_start = ALLOWED_CRNS.get(crn_num, {}).get("class_start_time", "02:30:00 PM")
+    # Get class start time from DB user first, then config fallback
+    db_user = get_user_by_crn(ta_name)
+    if db_user:
+        class_start = db_user.get("class_start_time", "02:30:00 PM")
+    else:
+        crn_num = int(ta_name) if ta_name.isdigit() else 0
+        class_start = ALLOWED_CRNS.get(crn_num, {}).get("class_start_time", "02:30:00 PM")
 
     try:
         result = compute_rewards(file1_content, file2_content, week, custom_rewards, class_start)
@@ -302,7 +352,11 @@ async def pv_sync_students(body: SyncStudentsBody):
     pv_students = []
     try:
         pv_result = await client.list_students()
-        pv_students = pv_result.get("students", [])
+        pv_students = pv_result.get("users", pv_result.get("students", []))
+        # Normalize: ensure each student has a "studentId" field
+        for s in pv_students:
+            if "studentId" not in s and "userId" in s:
+                s["studentId"] = s["userId"]
     except Exception:
         pass
 
@@ -326,7 +380,8 @@ async def pv_sync_students(body: SyncStudentsBody):
         if pv_students:
             matched, unmatched = client.match_students_local(pv_students, rk_names)
         else:
-            raise HTTPException(status_code=400, detail="Failed to match students via Prizeversity API")
+            # Still return RK names as unmatched so the UI can show them
+            unmatched = list(rk_names)
 
     # Also return existing saved mappings so the frontend can merge
     saved = get_student_mappings(body.ta_name)

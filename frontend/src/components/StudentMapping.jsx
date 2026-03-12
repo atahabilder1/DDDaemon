@@ -66,7 +66,7 @@ export default function StudentMapping({ taName, onClose }) {
   };
 
   const handleManualSelect = (rkName, pvStudentId) => {
-    const pv = pvStudents.find((s) => s.studentId || s._id === pvStudentId);
+    const pv = pvStudents.find((s) => s.studentId || s.userId || s._id === pvStudentId);
     setManualMappings((prev) => ({
       ...prev,
       [rkName]: pvStudentId
@@ -163,11 +163,11 @@ export default function StudentMapping({ taName, onClose }) {
                         {pvStudents
                           .filter(
                             (s) =>
-                              !usedPvIds.has(s.studentId || s._id) ||
-                              manualMappings[name]?.pv_student_id === s.studentId || s._id
+                              !usedPvIds.has(s.studentId || s.userId || s._id) ||
+                              manualMappings[name]?.pv_student_id === s.studentId || s.userId || s._id
                           )
                           .map((s) => (
-                            <option key={s.studentId || s._id} value={s.studentId || s._id}>
+                            <option key={s.studentId || s.userId || s._id} value={s.studentId || s.userId || s._id}>
                               {s.name}
                             </option>
                           ))}

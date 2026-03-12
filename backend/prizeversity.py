@@ -83,7 +83,7 @@ class PrizeversityClient:
             rk_lower = rk_name.lower().strip()
 
             for pv in pv_students:
-                pv_id = pv.get("studentId", pv.get("_id", ""))
+                pv_id = pv.get("studentId", pv.get("userId", pv.get("_id", "")))
                 if pv_id in used_pv_ids:
                     continue
                 pv_name = pv.get("name", "").lower().strip()
